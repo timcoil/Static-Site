@@ -4,6 +4,9 @@ const marked = require('marked');
 const frontMatter = require('front-matter');
 const { glob } = require('glob');
 
+// Load site configuration
+const config = require('../src/config');
+
 // Configure directories
 const srcDir = path.join(__dirname, '../src');
 const publicDir = path.join(__dirname, '../public');
@@ -87,6 +90,9 @@ async function processFile(filePath, contentType) {
       templateContent = fs.readFileSync(path.join(srcDir, `templates/${template}.html`), 'utf8');
     }
     
+    // Process includes in the template
+    templateContent = processIncludes(templateContent);
+    
     // Replace template placeholders
     let html = templateContent.replace('{{content}}', content);
     html = html.replace('{{title}}', title);
@@ -95,6 +101,9 @@ async function processFile(filePath, contentType) {
     Object.keys(attributes).forEach(key => {
       html = html.replace(new RegExp(`{{${key}}}`, 'g'), attributes[key]);
     });
+    
+    // Add site configuration values
+    html = html.replace('{{convertkit_form_action}}', config.convertkit.form_action);
     
     // Write the HTML file
     fs.writeFileSync(outputPath, html);
@@ -120,6 +129,21 @@ async function processFile(filePath, contentType) {
   }
 }
 
+// Function to process include tags
+function processIncludes(content) {
+  const includeRegex = /{%\s*include\s*"([^"]+)"\s*%}/g;
+  
+  return content.replace(includeRegex, (match, includePath) => {
+    try {
+      const includeContent = fs.readFileSync(path.join(srcDir, 'templates', includePath), 'utf8');
+      return includeContent;
+    } catch (error) {
+      console.error(`Error including file ${includePath}:`, error);
+      return match; // Keep the original include tag if there's an error
+    }
+  });
+}
+
 async function generateBlogIndex(posts) {
   try {
     // Read the blog index content
@@ -133,9 +157,15 @@ async function generateBlogIndex(posts) {
     // Get the template
     const templateContent = fs.readFileSync(path.join(srcDir, 'templates/blog-index.html'), 'utf8');
     
+    // Process includes in the template
+    const processedTemplate = processIncludes(templateContent);
+    
     // Replace content in template
-    let html = templateContent.replace('{{content}}', content);
+    let html = processedTemplate.replace('{{content}}', content);
     html = html.replace('{{title}}', attributes.title || 'Blog');
+    
+    // Add site configuration values
+    html = html.replace('{{convertkit_form_action}}', config.convertkit.form_action);
     
     // Replace blog posts list
     const postsPattern = '{{#each posts}}';
